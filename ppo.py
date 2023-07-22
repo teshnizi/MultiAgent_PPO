@@ -176,6 +176,7 @@ class PPO(nn.Module):
         # Optimizing the policy and value network
         b_inds = np.arange(self.args.batch_size)
 
+        print('doing the update')
         clipfracs = []
         for epoch in range(self.args.update_epochs):
             # np.random.shuffle(b_inds)
@@ -223,12 +224,14 @@ class PPO(nn.Module):
                 if approx_kl > self.args.target_kl:
                     break
 
+        print('update done')
         y_pred, y_true = b_values.sum(
             dim=-1).cpu().numpy(), b_returns.cpu().numpy()
         var_y = np.var(y_true)
         explained_var = np.nan if var_y == 0 else 1 - \
             np.var(y_true - y_pred) / var_y
 
+        print(f'Writing to tensorboard at {self.global_step} step')
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         self.writer.add_scalar("charts/learning_rate",
                                self.optimizer.param_groups[0]["lr"], self.global_step)
@@ -275,7 +278,7 @@ class PPO(nn.Module):
 
             self.update()
 
-            if update % 1000 == 0:
+            if update % 500 == 0:
                 self.play_trajectory(plays=2, use_keyboard=False)
 
         self.envs.close()

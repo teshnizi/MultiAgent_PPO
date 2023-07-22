@@ -11,7 +11,7 @@ import torch
 
 
 import warehouse_env
-from agent import Agent
+from agent import Agent, Model, AgentConfig
 from ppo import PPO
 from utils import make_env
 
@@ -126,6 +126,7 @@ if __name__ == "__main__":
                       gym.spaces.MultiDiscrete), "only multi discrete action space is supported (one discrete action per agent)"
 
     agent = Agent(envs, agents=args.agents)
+    agent = Model(envs, config=AgentConfig, agents=args.agents, n_action=7)
 
     ppo = PPO(agent, envs, test_envs, args, run_name)
     ppo.train()
