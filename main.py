@@ -148,6 +148,6 @@ if __name__ == "__main__":
     if args.eval:
         ppo.eval()
     elif args.show:
-        ppo.play_trajectory(5)
+        ppo.play_trajectory(3)
     else:
         ppo.train()

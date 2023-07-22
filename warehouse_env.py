@@ -195,7 +195,7 @@ class WarehouseEnv(gym.Env):
 
         # subtract distances of the objects from their destinations from the reward
         reward -= np.sum(np.abs(self.objects[:,
-                         0:2] - self.objects[:, 2:4]))/(self.N)
+                         0:2] - self.objects[:, 2:4]))/(self.N * self.object_num)
 
         # subtract distances of the agents from the first object from the reward
 
