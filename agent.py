@@ -20,19 +20,19 @@ class Agent(nn.Module):
         self.agents = agents
         self.critic = nn.Sequential(
             layer_init(
-                nn.Linear(np.array(envs.single_observation_space.shape[-1] * 2), 64)),
-            nn.Tanh(),
+                nn.Linear(np.array(envs.single_observation_space.shape[-1] * 3), 64)),
+            nn.GELU(),
             layer_init(nn.Linear(64, 64)),
-            nn.Tanh(),
+            nn.GELU(),
             layer_init(nn.Linear(64, self.agents), std=1.0),
         )
 
         self.actor = nn.Sequential(
             layer_init(
-                nn.Linear(np.array(envs.single_observation_space.shape[-1] * 2), 64)),
-            nn.Tanh(),
+                nn.Linear(np.array(envs.single_observation_space.shape[-1] * 3), 64)),
+            nn.GELU(),
             layer_init(nn.Linear(64, 64)),
-            nn.Tanh(),
+            nn.GELU(),
             layer_init(
                 nn.Linear(64, 7 * self.agents), std=0.01),
         )
@@ -49,6 +49,11 @@ class Agent(nn.Module):
         # agents_x = x[:, :self.agents, :]
 
         agents_x = x.reshape(x.shape[0], -1)
+
+        if x.shape[0] < 2:
+            print(agents_x)
+        # print(x.shape, agents_x.shape)
+        # 1/0
 
         logits = self.actor(agents_x)
 

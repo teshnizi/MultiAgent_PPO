@@ -275,8 +275,8 @@ class PPO(nn.Module):
 
             self.update()
 
-            if update % 50 == 0:
-                self.play_trajectory(plays=3, use_keyboard=False)
+            if update % 1000 == 0:
+                self.play_trajectory(plays=2, use_keyboard=False)
 
         self.envs.close()
         self.writer.close()

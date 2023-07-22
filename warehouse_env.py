@@ -62,11 +62,13 @@ class WarehouseEnv(gym.Env):
         self.observation_space = spaces.Box(
             low=-1, high=self.N, shape=(self.agent_num + self.object_num, 4), dtype=np.float32)
 
-        self.max_steps = self.N * 4
+        self.max_steps = self.N * 8
         self.warmup = warmup
 
     def step(self, action):
 
+        # print('----')
+        # print('Actions: ', action)
         # if action is numpy int64, convert to numpy array:
         if isinstance(action, np.int64):
             action = np.array([action])
@@ -78,18 +80,23 @@ class WarehouseEnv(gym.Env):
             self.agents[:, 0:2] < self.N), "Agent out of bounds!"
 
         # assert all objects are within bounds
-        assert np.all(self.objects[:, 0:2] >= 0) and np.all(
-            self.objects[:, 0:2] < self.N), f"Object out of bounds! {self.objects}"
+        # assert np.all(self.objects[:, 0:2] >= 0) and np.all(
+        #     self.objects[:, 0:2] < self.N), f"Object out of bounds! {self.objects}"
 
         # assert all agents are not on top of each other
-        assert np.unique(
-            self.agents[:, 0:2], axis=0).shape[0] == self.agents.shape[0], "Agents on top of each other!"
+        # assert np.unique(
+        #     self.agents[:, 0:2], axis=0).shape[0] == self.agents.shape[0], "Agents on top of each other!"
+
+        # print('Agents: ', self.agents)
+        # print('Objects: ', self.objects)
+        # print('Agent of Object: ', self.agent_of_object)
 
         # make sure no two objects re taken by the same agent (no repetitive positive entries in self.agent_of_object)
         assert np.unique(self.agent_of_object[self.agent_of_object >= 0]).shape[0] == self.agent_of_object[
             self.agent_of_object >= 0].shape[0], "Two agents are carrying the same object!"
 
         # make sure no two objects are taken to the same destination (no repetitive entries in self.agents[:, 3])
+
         assert np.unique(self.agents[:, 3][self.agents[:, 3] >= 0]).shape[0] == self.agents[:,
                                                                                             3][self.agents[:, 3] >= 0].shape[0], "Two objects are taken to the same destination!"
 
@@ -134,32 +141,52 @@ class WarehouseEnv(gym.Env):
                     self.objects[int(self.agents[a, 3]), 1] -= 1
 
             elif action[a] == 5:  # Pick Up
-                object_index = np.where(
+
+                untaken_objects = np.where(self.agent_of_object == -1)[0]
+                objects_at_agent = np.where(
                     (self.objects[:, 0:2] == self.agents[a, 0:2]).all(axis=1))[0]
 
-                # assert object_index.size == 1, "0 or Multiple objects at agent's location!"
-                if object_index.size == 0:
+                # print('eq ', self.objects[:, 0:2] == self.agents[a, 0:2])
+                # print('oaa ', objects_at_agent)
+
+                valid_objects = np.intersect1d(
+                    untaken_objects, objects_at_agent)
+
+                # print(valid_objects)
+                # make sure the object is not already taken
+                if self.agent_of_object[valid_objects] != -1:
+                    continue
+
+                # assert valid_objects.size == 1, "0 or Multiple objects at agent's location!"
+                if valid_objects.size == 0:
                     rewards[a] -= 5
                     continue
-                self.agents[a, 3] = object_index[0]
-                self.agent_of_object[object_index[0]] = a
+                self.agents[a, 3] = valid_objects[0]
+
+                self.agent_of_object[valid_objects[0]] = a
                 # add a reward if the object is never picked up before
-                if self.virgin_objects[object_index[0]]:
+                if self.virgin_objects[valid_objects[0]]:
                     rewards[a] += self.N
-                    self.virgin_objects[object_index[0]] = False
+                    self.virgin_objects[valid_objects[0]] = False
 
             elif action[a] == 6:  # Drop Off
                 # assert self.agents[a, 3] != -1, "Agent not carrying an object!"
                 if not self.agents[a, 3] == -1:
                     rewards[a] -= 5
 
-                self.agents[a, 3] = -1
                 self.agent_of_object[int(self.agents[a, 3])] = -1
+                self.agents[a, 3] = -1
+
                 rewards[a] -= 2
 
             if self.agents[a, 3] != -1:
                 if (self.objects[int(self.agents[a, 3]), 0:2] == self.objects[int(self.agents[a, 3]), 2:4]).all():
                     rewards[a] += self.N * 3
+
+                    self.agent_of_object[int(self.agents[a, 3])] = -1
+                    self.objects[int(self.agents[a, 3]), :] = -4
+
+                    self.agents[a, 3] = -1
 
         reward = np.sum(rewards)
 
@@ -172,14 +199,14 @@ class WarehouseEnv(gym.Env):
 
         # subtract distances of the agents from the first object from the reward
 
-        reward -= np.sum(
-            np.abs(self.agents[:, 0:2] - self.objects[0, 0:2]))
+        # reward -= np.sum(
+        #     np.abs(self.agents[:, 0:2] - self.objects[0, 0:2]))
 
         self.current_step += 1
 
         # environment terminates when all objects are at their destinations or when max_steps is reached
-        done = np.all((self.objects[:, 0:2] == self.objects[:, 2:4]).all(
-            axis=1)) or self.current_step >= self.max_steps
+        done = (self.objects[:, 0] <= -
+                1).all() or self.current_step >= self.max_steps
 
         obs = np.concatenate((self.agents, self.objects), axis=0)
 
@@ -231,7 +258,10 @@ class WarehouseEnv(gym.Env):
 
             # Pick Up if object is at agent location and agent is not already carrying an object
             if agent_data[i, 3] == -1 and np.any(np.all(object_data[:, 0:2] == agent_data[i, 0:2], axis=1)):
-                mask[i, 5] = 1
+                obj = np.where(
+                    np.all(object_data[:, 0:2] == agent_data[i, 0:2], axis=1))[0][0]
+                if self.agent_of_object[obj] == -1:
+                    mask[i, 5] = 1
 
             # Drop Off if there's no other object at agent location and agent is carrying an object
             if (agent_data[i, 3] != -1) and (np.sum(np.all(object_data[:, 0:2] == agent_data[i, 0:2], axis=1)) == 1):
@@ -244,6 +274,7 @@ class WarehouseEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
 
+        # print('========')
         # Set the seed
         if seed is not None:
             np.random.seed(seed)
@@ -288,6 +319,7 @@ class WarehouseEnv(gym.Env):
 
         # self.agents[0] = np.array([1, 1, -1, -1])
         # self.objects[0] = np.array([4, 2, 2, 5])
+        # self.objects[1] = np.array([3, 5, 1, 4])
 
         obs = np.concatenate((self.agents, self.objects), axis=0)
         info = {'mask': self.calculate_mask(obs)}
