@@ -7,9 +7,10 @@ import torch.optim as optim
 import numpy as np
 
 import time
+import os 
 
 
-class PPO(nn.Module):
+class PPO():
 
     def __init__(self, agent, envs, test_envs, args, run_name):
         super().__init__()
@@ -17,11 +18,14 @@ class PPO(nn.Module):
         self.args = args
 
         self.device = torch.device(
-            "cuda" if torch.cuda.is_available() and self.cuda else "cpu")
+            "cuda" if torch.cuda.is_available() and self.args.cuda else "cpu")
 
+        print("running on device:", self.device)
         self.agent = agent.to(self.device)
         self.envs = envs
         self.test_envs = test_envs
+        self.run_name = run_name
+        
         self.optimizer = torch.optim.Adam(
             self.agent.parameters(), lr=self.args.learning_rate, eps=1e-5)
 
@@ -176,7 +180,7 @@ class PPO(nn.Module):
         # Optimizing the policy and value network
         b_inds = np.arange(self.args.batch_size)
 
-        print('doing the update')
+        
         clipfracs = []
         for epoch in range(self.args.update_epochs):
             # np.random.shuffle(b_inds)
@@ -224,14 +228,12 @@ class PPO(nn.Module):
                 if approx_kl > self.args.target_kl:
                     break
 
-        print('update done')
         y_pred, y_true = b_values.sum(
             dim=-1).cpu().numpy(), b_returns.cpu().numpy()
         var_y = np.var(y_true)
         explained_var = np.nan if var_y == 0 else 1 - \
             np.var(y_true - y_pred) / var_y
 
-        print(f'Writing to tensorboard at {self.global_step} step')
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         self.writer.add_scalar("charts/learning_rate",
                                self.optimizer.param_groups[0]["lr"], self.global_step)
@@ -278,8 +280,9 @@ class PPO(nn.Module):
 
             self.update()
 
-            if update % 500 == 0:
-                self.play_trajectory(plays=2, use_keyboard=False)
+            if update % self.args.save_interval == 0:
+                self.save()
+                # self.play_trajectory(plays=2, use_keyboard=False)
 
         self.envs.close()
         self.writer.close()
@@ -332,3 +335,19 @@ class PPO(nn.Module):
                 returns += [rewards[0]]
 
             returns = np.array(returns)
+         
+    def save(self):
+        save_dir = f"runs/{self.run_name}/models/"
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+            
+        torch.save(self.agent.state_dict(), save_dir + f"{self.global_step}.pt")
+    
+    def load(self, path):
+        self.agent.load_state_dict(torch.load(path))
+        
+    
+    def eval(self):
+        raise NotImplementedError
+    
+    

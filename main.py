@@ -3,17 +3,19 @@ import argparse
 import os
 import random
 import time
-from distutils.util import strtobool
+# from distutils.util import strtobool
+
 
 import gymnasium as gym
 import numpy as np
 import torch
 
+from datetime import datetime
 
 import warehouse_env
 from agent import Agent, Model, AgentConfig
 from ppo import PPO
-from utils import make_env
+from utils import make_env, strtobool
 
 # set torch to print all tensor
 torch.set_printoptions(profile="full")
@@ -74,6 +76,14 @@ def parse_args():
         help="the maximum norm for the gradient clipping")
     parser.add_argument("--target-kl", type=float, default=None,
         help="the target KL divergence threshold")
+    parser.add_argument("--save-interval", type=int, default=512,
+        help="the interval to save the model")
+    parser.add_argument("--load", type=str, default=None,
+                            help="the model to load if any")
+    parser.add_argument("--eval", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="if toggled, evaluation runs will be deterministic and performed on the CPU")
+    parser.add_argument("--show", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="if toggled, the environment will be rendered")
 
     # ===============================
     # Custom arguments
@@ -97,7 +107,8 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    readable_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    run_name = f"{args.env_id}__agents:{args.agents}__objects:{args.objects}__{args.seed}__{readable_time}"
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
@@ -125,8 +136,18 @@ if __name__ == "__main__":
     assert isinstance(envs.single_action_space,
                       gym.spaces.MultiDiscrete), "only multi discrete action space is supported (one discrete action per agent)"
 
-    agent = Agent(envs, agents=args.agents)
+    # agent = Agent(envs, agents=args.agents)
     agent = Model(envs, config=AgentConfig, agents=args.agents, n_action=7)
 
     ppo = PPO(agent, envs, test_envs, args, run_name)
-    ppo.train()
+    
+    if args.load is not None:
+        ppo.load(args.load)
+        print("Loaded model from: ", args.load)
+    
+    if args.eval:
+        ppo.eval()
+    elif args.show:
+        ppo.play_trajectory(5)
+    else:
+        ppo.train()
