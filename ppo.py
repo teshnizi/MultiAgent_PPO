@@ -347,7 +347,7 @@ class PPO():
         torch.save(self.agent.state_dict(), save_dir + f"{self.global_step}.pt")
     
     def load(self, path):
-        self.agent.load_state_dict(torch.load(path))
+        self.agent.load_state_dict(torch.load(path, map_location=self.device))
         
     
     def eval(self):
