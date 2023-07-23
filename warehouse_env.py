@@ -42,7 +42,7 @@ class WarehouseEnv(gym.Env):
         6: Drop Off
     """
 
-    def __init__(self, grid_size=6, n_agents=5, n_objects=5, warmup=True, seed=None):
+    def __init__(self, grid_size=6, n_agents=2, n_objects=3, warmup=True, seed=None):
         super(WarehouseEnv, self).__init__()
 
         # Set the seed
@@ -274,52 +274,37 @@ class WarehouseEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
 
-        # print('========')
         # Set the seed
         if seed is not None:
             np.random.seed(seed)
 
-        # Sample objects
+        
         self.objects = np.zeros((self.object_num, 4), dtype=np.float32) - 1
+        self.agents = np.zeros((self.agent_num, 4), dtype=np.float32) - 1
 
         self.virgin_objects = np.zeros((self.object_num, 1)) < 1
 
         self.agent_of_object = np.zeros((self.object_num, 1)) - 1
 
-        for i in range(self.object_num):
+        # sample locations and destinations for each object without replacement
+        tmp = np.random.choice(self.N**2, size=self.object_num,
+                                 replace=False).reshape(self.object_num)
+        x, y = tmp // self.N, tmp % self.N
+        self.objects[:, 0:2] = np.stack((x, y), axis=1)
+        
+        tmp = np.random.choice(self.N**2, size=self.object_num,
+                                    replace=True).reshape(self.object_num)
+        
+        x, y = tmp // self.N, tmp % self.N
+        self.objects[:, 2:4] = np.stack((x, y), axis=1)
 
-            # location:
-            x = np.random.randint(low=0, high=self.N)
-            y = np.random.randint(low=0, high=self.N)
-            while ((x, y) in self.objects[:, 0:2] or (x, y) in self.objects[:, 2:4]):
-                x = np.random.randint(low=0, high=self.N)
-                y = np.random.randint(low=0, high=self.N)
-            self.objects[i, 0:2] = (x, y)
-
-            # destination:
-            x = np.random.randint(low=0, high=self.N)
-            y = np.random.randint(low=0, high=self.N)
-            while ((x, y) in self.objects[:, 0:2] or (x, y) in self.objects[:, 2:4]):
-                x = np.random.randint(low=0, high=self.N)
-                y = np.random.randint(low=0, high=self.N)
-            self.objects[i, 2:4] = (x, y)
-
-        # Sample agents (with different starting locations)
-        self.agents = np.zeros((self.agent_num, 4), dtype=np.float32) - 1
-
-        for i in range(self.agent_num):
-            x = np.random.randint(low=0, high=self.N)
-            y = np.random.randint(low=0, high=self.N)
-            while (x, y) in self.agents[:, 0:2]:
-                x = np.random.randint(low=0, high=self.N)
-                y = np.random.randint(low=0, high=self.N)
-            self.agents[i, 0:2] = (x, y)
+        # sample locations for each agent without replacement
+        tmp = np.random.choice(self.N**2, size=self.agent_num,
+                                    replace=False).reshape(self.agent_num)
+        x, y = tmp // self.N, tmp % self.N
+        self.agents[:, 0:2] = np.stack((x, y), axis=1)
 
         self.current_step = 0
-
-        # self.agents[0] = np.array([1, 1, -1, -1])
-        # self.objects[0] = np.array([4, 2, 2, 5])
-        # self.objects[1] = np.array([3, 5, 1, 4])
 
         obs = np.concatenate((self.agents, self.objects), axis=0)
         info = {'mask': self.calculate_mask(obs)}
@@ -354,3 +339,4 @@ class WarehouseEnv(gym.Env):
 # register the env
 gym.register(id='Warehouse-v0',
              entry_point='warehouse_env:WarehouseEnv')
+

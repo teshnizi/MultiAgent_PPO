@@ -93,7 +93,10 @@ def parse_args():
 
     parser.add_argument("--objects", type=int, default=1,
         help="the number of objects in the environment")
-
+    
+    parser.add_argument("--grid-size", type=int, default=10,
+        help="the size of the grid in the environment")
+    
     # ===============================
     # ===============================
 
@@ -108,7 +111,7 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     readable_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    run_name = f"{args.env_id}__agents:{args.agents}__objects:{args.objects}__{args.seed}__{readable_time}"
+    run_name = f"{args.env_id}__N:{args.grid_size}__agents:{args.agents}__objects:{args.objects}__{args.seed}__{readable_time}"
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
@@ -120,6 +123,7 @@ if __name__ == "__main__":
     kwargs = {
         "n_agents": args.agents,
         "n_objects": args.objects,
+        "grid_size": args.grid_size,
     }
 
     # env setup
@@ -151,4 +155,3 @@ if __name__ == "__main__":
         ppo.play_trajectory(3)
     else:
         ppo.train()
-

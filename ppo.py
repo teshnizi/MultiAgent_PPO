@@ -69,6 +69,7 @@ class PPO():
         next_mask = self.next_mask
 
         for step in range(0, steps):
+            
             self.global_step += 1 * self.args.num_envs
             self.obs[step] = next_obs
             self.masks[step] = next_mask
@@ -261,7 +262,9 @@ class PPO():
         self.global_step = 0
         self.start_time = time.time()
 
+        print('Beginning training...')
         self.next_obs, info = self.envs.reset(seed=self.args.seed)
+        print('Finished resetting envs')
         self.next_obs = torch.Tensor(self.next_obs).to(self.device)
         self.next_done = torch.zeros(self.args.num_envs).to(self.device)
         self.next_mask = np.stack(info['mask'], axis=0)
