@@ -7,7 +7,7 @@ import torch.optim as optim
 import numpy as np
 
 import time
-import os 
+import os
 
 
 class PPO():
@@ -25,7 +25,7 @@ class PPO():
         self.envs = envs
         self.test_envs = test_envs
         self.run_name = run_name
-        
+
         self.optimizer = torch.optim.Adam(
             self.agent.parameters(), lr=self.args.learning_rate, eps=1e-5)
 
@@ -69,7 +69,7 @@ class PPO():
         next_mask = self.next_mask
 
         for step in range(0, steps):
-            
+
             self.global_step += 1 * self.args.num_envs
             self.obs[step] = next_obs
             self.masks[step] = next_mask
@@ -181,7 +181,6 @@ class PPO():
         # Optimizing the policy and value network
         b_inds = np.arange(self.args.batch_size)
 
-        
         clipfracs = []
         for epoch in range(self.args.update_epochs):
             # np.random.shuffle(b_inds)
@@ -338,19 +337,17 @@ class PPO():
                 returns += [rewards[0]]
 
             returns = np.array(returns)
-         
+
     def save(self):
         save_dir = f"runs/{self.run_name}/models/"
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
-            
-        torch.save(self.agent.state_dict(), save_dir + f"{self.global_step}.pt")
-    
+
+        torch.save(self.agent.state_dict(),
+                   save_dir + f"{self.global_step}.pt")
+
     def load(self, path):
         self.agent.load_state_dict(torch.load(path, map_location=self.device))
-        
-    
+
     def eval(self):
         raise NotImplementedError
-    
-    
