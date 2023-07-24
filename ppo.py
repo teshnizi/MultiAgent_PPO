@@ -9,6 +9,8 @@ import numpy as np
 import time
 import os
 
+import pygame
+
 
 class PPO():
 
@@ -298,10 +300,11 @@ class PPO():
             print('====================')
 
             obs, info = env.reset()
-            obs = torch.tensor(obs).to(self.device)
-            mask = torch.tensor(np.stack(info['mask'], axis=0)).to(self.device)
+            obs = torch.tensor(obs).to(self.device).unsqueeze(0)
+            mask = torch.tensor(np.stack(info['mask'], axis=0)).to(
+                self.device).unsqueeze(0)
 
-            env.call('render',)
+            env.render()
 
             returns = []
             done = False
@@ -319,22 +322,24 @@ class PPO():
                     action, log_prob, entropy, value = self.agent.get_action_and_value(
                         obs, mask)
 
+                action, log_prob, entropy, value = action.squeeze(
+                    0), log_prob.squeeze(0), entropy.squeeze(0), value.squeeze(0)
+
                 print('Action: ', action, 'Log Prob: ', log_prob,
                       'Entropy: ', entropy, 'Value: ', value)
 
                 print(action, action.cpu().numpy())
-                obs, rewards, dones, _, info = env.step(action.cpu().numpy())
+                obs, reward, done, _, info = env.step(action.cpu().numpy())
 
-                print('Reward: ', rewards, 'Done: ', dones)
+                print('Reward: ', reward, 'Done: ', done)
 
-                obs = torch.tensor(obs).to(self.device)
+                obs = torch.tensor(obs).to(self.device).unsqueeze(0)
                 mask = torch.tensor(
-                    np.stack(info['mask'], axis=0)).to(self.device)
+                    np.stack(info['mask'], axis=0)).to(self.device).unsqueeze(0)
 
-                env.call('render',)
-                done = dones[0]
+                env.render()
 
-                returns += [rewards[0]]
+                returns += reward
 
             returns = np.array(returns)
 

@@ -1,4 +1,5 @@
 # docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/ppo/#ppopy
+import pygame
 import argparse
 import os
 import random
@@ -93,10 +94,10 @@ def parse_args():
 
     parser.add_argument("--objects", type=int, default=1,
         help="the number of objects in the environment")
-    
+
     parser.add_argument("--grid-size", type=int, default=10,
         help="the size of the grid in the environment")
-    
+
     # ===============================
     # ===============================
 
@@ -109,6 +110,7 @@ def parse_args():
 
 
 if __name__ == "__main__":
+
     args = parse_args()
     readable_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     run_name = f"{args.env_id}__N:{args.grid_size}__agents:{args.agents}__objects:{args.objects}__{args.seed}__{readable_time}"
@@ -132,10 +134,8 @@ if __name__ == "__main__":
          for i in range(args.num_envs)]
     )
 
-    test_envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, args.seed + i, i, args.capture_video, run_name, **kwargs)
-            for i in range(args.num_envs, args.num_envs + 1)]
-    )
+    test_envs = make_env(args.env_id, args.seed + args.num_envs + 1,
+                         args.num_envs + 1, args.capture_video, run_name, **kwargs)()
 
     assert isinstance(envs.single_action_space,
                       gym.spaces.MultiDiscrete), "only multi discrete action space is supported (one discrete action per agent)"
@@ -144,14 +144,14 @@ if __name__ == "__main__":
     agent = Model(envs, config=AgentConfig, agents=args.agents, n_action=7)
 
     ppo = PPO(agent, envs, test_envs, args, run_name)
-    
+
     if args.load is not None:
         ppo.load(args.load)
         print("Loaded model from: ", args.load)
-    
+
     if args.eval:
         ppo.eval()
     elif args.show:
-        ppo.play_trajectory(3)
+        ppo.play_trajectory(2)
     else:
         ppo.train()

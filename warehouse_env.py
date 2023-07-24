@@ -3,6 +3,10 @@ from gymnasium import spaces
 import numpy as np
 import random
 
+import pygame
+
+import utils
+
 # things to add:
 # - agent speeds
 # - agent capacities
@@ -16,6 +20,8 @@ import random
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Circle
+
+import time
 
 
 class WarehouseEnv(gym.Env):
@@ -278,7 +284,6 @@ class WarehouseEnv(gym.Env):
         if seed is not None:
             np.random.seed(seed)
 
-        
         self.objects = np.zeros((self.object_num, 4), dtype=np.float32) - 1
         self.agents = np.zeros((self.agent_num, 4), dtype=np.float32) - 1
 
@@ -288,19 +293,19 @@ class WarehouseEnv(gym.Env):
 
         # sample locations and destinations for each object without replacement
         tmp = np.random.choice(self.N**2, size=self.object_num,
-                                 replace=False).reshape(self.object_num)
+                               replace=False).reshape(self.object_num)
         x, y = tmp // self.N, tmp % self.N
         self.objects[:, 0:2] = np.stack((x, y), axis=1)
-        
+
         tmp = np.random.choice(self.N**2, size=self.object_num,
-                                    replace=True).reshape(self.object_num)
-        
+                               replace=True).reshape(self.object_num)
+
         x, y = tmp // self.N, tmp % self.N
         self.objects[:, 2:4] = np.stack((x, y), axis=1)
 
         # sample locations for each agent without replacement
         tmp = np.random.choice(self.N**2, size=self.agent_num,
-                                    replace=False).reshape(self.agent_num)
+                               replace=False).reshape(self.agent_num)
         x, y = tmp // self.N, tmp % self.N
         self.agents[:, 0:2] = np.stack((x, y), axis=1)
 
@@ -311,32 +316,46 @@ class WarehouseEnv(gym.Env):
 
         return obs, info
 
-    def render(self, mode='human'):
-        fig, ax = plt.subplots()
-        ax.set_xlim(-1, self.N)
-        ax.set_ylim(-1, self.N)
-        # add N by N grid
-        ax.set_xticks(np.arange(0, self.N, 1))
-        ax.set_yticks(np.arange(0, self.N, 1))
-        ax.grid()
+    def render(self, mode='human', close=False):
+        block_size = 64
 
-        # draw agents as red dots
+        # Initialize pygame if it hasn't been done yet
+        if not pygame.get_init():
+            pygame.init()
+
+            self.screen = pygame.display.set_mode(
+                (self.N*block_size, self.N*block_size))
+
+        # Fill the background with white
+        self.screen.fill((255, 255, 255))
+
+        # # Draw the grid
+        for x in range(0, self.N*block_size, block_size):
+            for y in range(0, self.N*block_size, block_size):
+                pygame.draw.rect(self.screen, (0, 0, 0),
+                                 pygame.Rect(x, y, block_size, block_size), 1)
+
+        for i, o in enumerate(self.objects):
+
+            utils.draw_object(
+                self.screen, o[0]*block_size, o[1] * block_size, block_size, is_taken=self.agent_of_object[i] != -1)
+
+            utils.draw_destination(
+                self.screen, o[2]*block_size, o[3]*block_size, block_size)
+
         for a in self.agents:
-            ax.add_patch(Rectangle((a[0]-0.5, a[1]-0.5), 1, 1, color='r'))
 
-        # draw objects as blue dots, add a border if they are being carried
-        for o in self.objects:
-            if o[3] == -1:
-                ax.add_patch(Circle((o[0], o[1]), 0.5, color='b'))
-            else:
-                ax.add_patch(Circle((o[0], o[1]), 0.5, color='b', fill=False))
+            print(a[0], a[1])
+            utils.draw_agent(
+                self.screen, a[0]*block_size, a[1] * block_size, block_size)
 
-            # also show destination of objects
-            ax.add_patch(Circle((o[2], o[3]), 0.5, color='g'))
-        plt.show()
+        # Update the display
+        pygame.display.flip()
+        pygame.event.get()
+
+        pygame.time.delay(400)
 
 
 # register the env
 gym.register(id='Warehouse-v0',
              entry_point='warehouse_env:WarehouseEnv')
-
