@@ -62,7 +62,7 @@ class WarehouseEnv(gym.Env):
         self.observation_space = spaces.Box(
             low=-1, high=self.N, shape=(self.agent_num + self.object_num, 4), dtype=np.float32)
 
-        self.max_steps = self.N * 8
+        self.max_steps = (self.N * 4 * self.object_num)//self.agent_num
         self.warmup = warmup
 
     def step(self, action):
