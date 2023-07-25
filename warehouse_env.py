@@ -353,7 +353,7 @@ class WarehouseEnv(gym.Env):
         pygame.display.flip()
         pygame.event.get()
 
-        pygame.time.delay(400)
+        pygame.time.delay(150)
 
 
 # register the env
