@@ -223,6 +223,9 @@ class Model(nn.Module):
         self.agent_encoding = nn.Parameter(torch.randn(1, 1, config.n_embed))
         self.object_encoding = nn.Parameter(torch.randn(1, 1, config.n_embed))
         
+        self.ape = nn.Embedding(100, config.n_embed)
+        self.ope = nn.Embedding(100, config.n_embed)
+        
         # self.agent_agg = nn.Sequential(
         #     layer_init(nn.Linear(5 * config.n_embed, config.n_embed)),
         #     nn.GELU(),
@@ -295,8 +298,15 @@ class Model(nn.Module):
         x = torch.cat([agent_x, picked_objects], dim=-1)
         x = self.post_concat_mlp(x)
 
-        x = self.agent_encoding.repeat(x.shape[0], 1, 1) + x
-        y = self.object_encoding.repeat(x.shape[0], 1, 1) + object_x
+
+        # x = self.agent_encoding.repeat(x.shape[0], 1, 1) + x
+        # y = self.object_encoding.repeat(x.shape[0], 1, 1) + object_x
+
+        agent_pos = torch.arange(0, A.shape[1]).unsqueeze(0).repeat(x.shape[0], 1).long().to(x.device)
+        object_pos = torch.arange(0, O.shape[1]).unsqueeze(0).repeat(x.shape[0], 1).long().to(x.device)
+        
+        x = x + self.ape(agent_pos)
+        y = object_x + self.ope(object_pos)
 
         return x, y
 
