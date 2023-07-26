@@ -200,6 +200,7 @@ class Model(nn.Module):
             layer_init(
                 nn.Linear(self.config.n_embed, self.config.n_embed)),
             nn.GELU(),
+            nn.Dropout(p=self.config.dropout),
             layer_init(nn.Linear(self.config.n_embed, self.config.n_embed)),
             nn.GELU(),
             layer_init(nn.Linear(self.config.n_embed, 1), std=1.0),
@@ -209,6 +210,7 @@ class Model(nn.Module):
             layer_init(
                 nn.Linear(self.config.n_embed, self.config.n_embed)),
             nn.GELU(),
+            nn.Dropout(p=self.config.dropout),
             layer_init(nn.Linear(self.config.n_embed, self.config.n_embed)),
             nn.GELU(),
             layer_init(

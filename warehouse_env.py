@@ -73,9 +73,6 @@ class WarehouseEnv(gym.Env):
 
     def step(self, action):
 
-        # print('----')
-        # print('Actions: ', action)
-        # if action is numpy int64, convert to numpy array:
         if isinstance(action, np.int64):
             action = np.array([action])
 
@@ -84,18 +81,6 @@ class WarehouseEnv(gym.Env):
         # assert all agents are within bounds
         assert np.all(self.agents[:, 0:2] >= 0) and np.all(
             self.agents[:, 0:2] < self.N), "Agent out of bounds!"
-
-        # assert all objects are within bounds
-        # assert np.all(self.objects[:, 0:2] >= 0) and np.all(
-        #     self.objects[:, 0:2] < self.N), f"Object out of bounds! {self.objects}"
-
-        # assert all agents are not on top of each other
-        # assert np.unique(
-        #     self.agents[:, 0:2], axis=0).shape[0] == self.agents.shape[0], "Agents on top of each other!"
-
-        # print('Agents: ', self.agents)
-        # print('Objects: ', self.objects)
-        # print('Agent of Object: ', self.agent_of_object)
 
         # make sure no two objects re taken by the same agent (no repetitive positive entries in self.agent_of_object)
         assert np.unique(self.agent_of_object[self.agent_of_object >= 0]).shape[0] == self.agent_of_object[
@@ -114,80 +99,64 @@ class WarehouseEnv(gym.Env):
                 pass
 
             elif action[a] == 1:  # Move Right
-                if not self.agents[a, 0] < self.N - 1:
-                    rewards[a] -= 5
-                    continue
                 self.agents[a, 0] += 1
                 if self.agents[a, 3] != -1:
                     self.objects[int(self.agents[a, 3]), 0] += 1
 
             elif action[a] == 2:  # Move Up
-                if not self.agents[a, 1] < self.N - 1:
-                    rewards[a] -= 5
-                    continue
                 self.agents[a, 1] += 1
                 if self.agents[a, 3] != -1:
                     self.objects[int(self.agents[a, 3]), 1] += 1
 
             elif action[a] == 3:  # Move Left
-                if not self.agents[a, 0] > 0:
-                    rewards[a] -= 5
-                    continue
                 self.agents[a, 0] -= 1
                 if self.agents[a, 3] != -1:
                     self.objects[int(self.agents[a, 3]), 0] -= 1
 
             elif action[a] == 4:  # Move Down
-                if not self.agents[a, 1] > 0:
-                    rewards[a] -= 5
-                    continue
-
                 self.agents[a, 1] -= 1
                 if self.agents[a, 3] != -1:
                     self.objects[int(self.agents[a, 3]), 1] -= 1
 
             elif action[a] == 5:  # Pick Up
-
                 untaken_objects = np.where(self.agent_of_object == -1)[0]
                 objects_at_agent = np.where(
                     (self.objects[:, 0:2] == self.agents[a, 0:2]).all(axis=1))[0]
 
-                # print('eq ', self.objects[:, 0:2] == self.agents[a, 0:2])
-                # print('oaa ', objects_at_agent)
-
                 valid_objects = np.intersect1d(
                     untaken_objects, objects_at_agent)
 
-                # print(valid_objects)
-                # make sure the object is not already taken
-                if self.agent_of_object[valid_objects] != -1:
-                    continue
+                # assert valid_objects.size >= 1, f"0 objects at agent's location! \n Agents: {self.agents} \n Objects: {self.objects} \n Agent of Object: {self.agent_of_object}, \n valid_objects: {valid_objects}, objects_at_agent: {objects_at_agent}"
+                
+                if len(valid_objects) == 0:
+                    continue # object taken by another agent in the same action
 
-                # assert valid_objects.size == 1, "0 or Multiple objects at agent's location!"
-                if valid_objects.size == 0:
-                    rewards[a] -= 5
-                    continue
-                self.agents[a, 3] = valid_objects[0]
+                # choose the first valid object that is not taken
+                for i in range(valid_objects.shape[0]):
+                    if self.agent_of_object[valid_objects[i]] == -1:
+                        break
+                    
+                valid_object = valid_objects[i]
 
-                self.agent_of_object[valid_objects[0]] = a
-                # add a reward if the object is never picked up before
-                if self.virgin_objects[valid_objects[0]]:
-                    rewards[a] += self.N
-                    self.virgin_objects[valid_objects[0]] = False
+                self.agents[a, 3] = valid_object
+
+                self.agent_of_object[valid_object] = a
+
+                # # add a reward if the object is never picked up before
+                if self.virgin_objects[valid_object]:
+                    rewards[a] += 10 / self.object_num
+                    self.virgin_objects[valid_object] = False
 
             elif action[a] == 6:  # Drop Off
-                # assert self.agents[a, 3] != -1, "Agent not carrying an object!"
-                if not self.agents[a, 3] == -1:
-                    rewards[a] -= 5
+                assert self.agents[a, 3] != -1, "Agent not carrying an object!"
 
                 self.agent_of_object[int(self.agents[a, 3])] = -1
                 self.agents[a, 3] = -1
 
-                rewards[a] -= 2
 
             if self.agents[a, 3] != -1:
                 if (self.objects[int(self.agents[a, 3]), 0:2] == self.objects[int(self.agents[a, 3]), 2:4]).all():
-                    rewards[a] += self.N * 3
+                    rewards[a] += 40 / self.object_num
 
                     self.agent_of_object[int(self.agents[a, 3])] = -1
                     self.objects[int(self.agents[a, 3]), :] = -4
@@ -196,23 +165,19 @@ class WarehouseEnv(gym.Env):
 
         reward = np.sum(rewards)
 
-        # for obj in range(self.object_num):
-        #     if self.agent_of_object[obj] > -1
-
         # subtract distances of the objects from their destinations from the reward
-        reward -= np.sum(np.abs(self.objects[:,
-                         0:2] - self.objects[:, 2:4]))/(self.N * self.object_num)
-
-        # subtract distances of the agents from the first object from the reward
-
-        # reward -= np.sum(
-        #     np.abs(self.agents[:, 0:2] - self.objects[0, 0:2]))
+        # reward -= np.sum(np.abs(self.objects[:,
+        #                  0:2] - self.objects[:, 2:4]))/(self.N * self.object_num)
 
         self.current_step += 1
 
         # environment terminates when all objects are at their destinations or when max_steps is reached
         done = (self.objects[:, 0] <= -
                 1).all() or self.current_step >= self.max_steps
+        
+        if done:
+            if (self.objects[:, 0] <= -1).all():
+                reward += 50
 
         obs = np.concatenate((self.agents, self.objects), axis=0)
 
