@@ -20,7 +20,7 @@ class PPO():
         self.args = args
 
         self.device = torch.device(
-            "cuda" if torch.cuda.is_available() and self.args.cuda else "cpu")
+            "cuda:1" if torch.cuda.is_available() and self.args.cuda else "cpu")
 
         print("running on device:", self.device)
         self.agent = agent.to(self.device)
@@ -129,7 +129,7 @@ class PPO():
 
                 self.advantages[t] = lastgaelam = delta + self.args.gamma * \
                     self.args.gae_lambda * nextnonterminal * lastgaelam
-
+                    
             self.returns = self.advantages + self.values.sum(dim=-1)
 
         # update env states
@@ -151,7 +151,7 @@ class PPO():
         return pg_loss
 
     def v_loss(self, newvalue, returns, values):
-
+        
         if self.args.clip_vloss:
             v_loss_unclipped = (newvalue - returns) ** 2
             v_clipped = values + torch.clamp(
@@ -166,7 +166,7 @@ class PPO():
         else:
             v_loss = 0.5 * \
                 ((newvalue - returns) ** 2).mean()
-
+        
         return v_loss
 
     def update(self):

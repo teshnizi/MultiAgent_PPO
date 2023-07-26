@@ -74,7 +74,7 @@ class Agent(nn.Module):
 
 @dataclass
 class AgentConfig:
-    n_embed: int = 128
+    n_embed: int = 64
     dropout: float = 0.2
     n_head: int = 4
     n_layer: int = 4
@@ -222,9 +222,55 @@ class Model(nn.Module):
         # Encodings for agents and objects to distinguish them in attention
         self.agent_encoding = nn.Parameter(torch.randn(1, 1, config.n_embed))
         self.object_encoding = nn.Parameter(torch.randn(1, 1, config.n_embed))
+        
+        # self.agent_agg = nn.Sequential(
+        #     layer_init(nn.Linear(5 * config.n_embed, config.n_embed)),
+        #     nn.GELU(),
+        #     nn.Dropout(p=self.config.dropout),
+        #     nn.LayerNorm(config.n_embed),
+        #     layer_init(nn.Linear(config.n_embed, config.n_embed)),
+        #     nn.GELU(),
+        #     nn.Dropout(p=self.config.dropout),
+        #     nn.LayerNorm(config.n_embed),
+        # )
+        
+        # self.msg_up_func = nn.Sequential(
+        #     layer_init(nn.Linear(2 * config.n_embed, config.n_embed)),
+        #     nn.GELU(),
+        #     nn.Dropout(p=self.config.dropout),
+        #     nn.LayerNorm(config.n_embed),
+        #     layer_init(nn.Linear(config.n_embed, config.n_embed)),
+        #     nn.GELU(),
+        #     nn.Dropout(p=self.config.dropout),
+        #     nn.LayerNorm(config.n_embed),
+        # )
+        
+        # self.msg_down_func = nn.Sequential(
+        #     layer_init(nn.Linear(2 * config.n_embed, config.n_embed)),
+        #     nn.GELU(),
+        #     nn.Dropout(p=self.config.dropout),
+        #     nn.LayerNorm(config.n_embed),
+        #     layer_init(nn.Linear(config.n_embed, config.n_embed)),
+        #     nn.GELU(),
+        #     nn.Dropout(p=self.config.dropout),
+        #     nn.LayerNorm(config.n_embed),
+        # )
+        
+        # self.init_msg = nn.Parameter(torch.randn(1, config.n_embed))
 
-    def get_embedding(self, obs):
-
+        # self.final_embedding_proj = nn.Sequential(
+        #     layer_init(nn.Linear(3 * config.n_embed, config.n_embed)),
+        #     nn.GELU(),
+        #     nn.Dropout(p=self.config.dropout),
+        #     nn.LayerNorm(config.n_embed),
+        #     layer_init(nn.Linear(config.n_embed, config.n_embed)),
+        #     nn.GELU(),
+        #     nn.Dropout(p=self.config.dropout),
+        #     nn.LayerNorm(config.n_embed),
+        # )
+            
+    def process_agents_and_objects(self, obs):
+        
         A = obs[:, :self.agents, :]
         O = obs[:, self.agents:, :]
 
@@ -247,20 +293,65 @@ class Model(nn.Module):
         # concat agent and object embeddings
         # (bs, agents, 2*embed)
         x = torch.cat([agent_x, picked_objects], dim=-1)
-
         x = self.post_concat_mlp(x)
 
         x = self.agent_encoding.repeat(x.shape[0], 1, 1) + x
-
-        # TODO: do the same for objects
         y = self.object_encoding.repeat(x.shape[0], 1, 1) + object_x
 
-        x = torch.cat([x, y], dim=1)
+        return x, y
+
+    def get_embedding(self, obs):
+        agent_x, object_x = self.process_agents_and_objects(obs)        
+        x = torch.cat([agent_x, object_x], dim=1)
 
         for att in self.atts:
             x = att(x)
 
         return x
+    
+    # def get_embedding(self, obs):
+    #     agent_x, object_x = self.process_agents_and_objects(obs)        
+    #     x = torch.cat([agent_x, object_x], dim=1)
+        
+    #     # obj_avg = object_x.mean(dim=1, keepdim=True)
+    #     # obj_mx = object_x.max(dim=1, keepdim=True)[0]
+    #     # obj_mn = object_x.min(dim=1, keepdim=True)[0]
+    #     # obj_sum = object_x.sum(dim=1, keepdim=True)
+        
+    #     # obj_agg = torch.cat([obj_avg, obj_mx, obj_mn, obj_sum], dim=-1)
+        
+    #     # # cat the agent_x with the object aggregation
+    #     # x = torch.cat([agent_x, torch.repeat_interleave(obj_agg, repeats=agent_x.shape[1], dim=1)], dim=-1)
+    #     # x = self.agent_agg(x)
+        
+    #     ''' Use Attenion '''
+    #     for att in self.atts:
+    #         x = att(x)
+    #     x = x[:, :self.agents, :]
+        
+        
+    #     current_msg = self.init_msg.repeat(x.shape[0], 1)
+        
+    #     all_down_msgs = []
+    #     all_up_msgs = []
+        
+    #     for id in range(self.agents):
+    #         new_msg = self.msg_down_func(torch.cat([x[:, id, :], current_msg], dim=-1))
+    #         all_down_msgs.append(new_msg)
+    #         current_msg = new_msg
+        
+    #     for id in range(self.agents - 1, -1, -1):
+    #         new_msg = self.msg_up_func(torch.cat([all_down_msgs[id], current_msg], dim=-1))
+    #         all_up_msgs.append(new_msg)
+    #         current_msg = new_msg
+            
+    #     all_down_msgs = torch.stack(all_down_msgs, dim=1)
+    #     all_up_msgs = torch.stack(all_up_msgs, dim=1)
+        
+    #     x = torch.cat([x, all_down_msgs, all_up_msgs], dim=-1)
+    #     x = self.final_embedding_proj(x)
+        
+    #     return x
 
     def get_action_and_value(self, obs, mask, action=None):
 

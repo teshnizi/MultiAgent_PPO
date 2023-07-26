@@ -170,7 +170,7 @@ class WarehouseEnv(gym.Env):
         #                  0:2] - self.objects[:, 2:4]))/(self.N * self.object_num)
 
         self.current_step += 1
-
+        
         # environment terminates when all objects are at their destinations or when max_steps is reached
         done = (self.objects[:, 0] <= -
                 1).all() or self.current_step >= self.max_steps
