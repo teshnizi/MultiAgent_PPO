@@ -74,16 +74,16 @@ class Agent(nn.Module):
 
 @dataclass
 class AgentConfig:
-    n_embed: int = 64
+    n_embed: int = 128
     dropout: float = 0.2
     n_head: int = 4
-    n_layer: int = 4
+    n_layer: int = 12
     bias: bool = True
 
 
 class MLP(nn.Module):
 
-    def __init__(self, config, inp_size=None):
+    def __init__(self, config, inp_size=None, layer_norm=False):
         super().__init__()
         if inp_size is None:
             inp_size = config.n_embed
@@ -93,12 +93,15 @@ class MLP(nn.Module):
         self.c_proj = nn.Linear(
             4 * config.n_embed, config.n_embed, bias=config.bias)
         self.dropout = nn.Dropout(config.dropout)
+        self.layer_norm = nn.LayerNorm([config.n_embed]) if layer_norm else None
 
     def forward(self, x):
         x = self.c_fc(x)
         x = self.gelu(x)
         x = self.c_proj(x)
         x = self.dropout(x)
+        if self.layer_norm is not None:
+            x = self.layer_norm(x)
         return x
 
 
@@ -176,29 +179,24 @@ class Block(nn.Module):
         return x
 
 
+
 class Model(nn.Module):
-    def __init__(self, envs, config, agents=1, n_action=7, n_features=4):
+    def __init__(self, envs, config, agents=1, n_action=7, n_features=5):
         super().__init__()
 
         self.agents = agents
         self.config = config
         self.n_action = n_action
 
-        self.agent_prep = nn.Sequential(
-            layer_init(nn.Linear(n_features, config.n_embed)),
-            nn.GELU(),
-        )
-        self.object_prep = nn.Sequential(
-            layer_init(nn.Linear(n_features, config.n_embed)),
-            nn.GELU(),
-        )
+        self.agent_prep = MLP(config, inp_size=n_features, layer_norm=True)
+        self.object_prep = MLP(config, inp_size=n_features, layer_norm=True)
 
         self.atts = nn.ModuleList([Block(config)
                                    for _ in range(config.n_layer)])
 
         self.critic = nn.Sequential(
             layer_init(
-                nn.Linear(self.config.n_embed, self.config.n_embed)),
+                nn.Linear(self.config.n_embed * 3, self.config.n_embed)),
             nn.GELU(),
             nn.Dropout(p=self.config.dropout),
             layer_init(nn.Linear(self.config.n_embed, self.config.n_embed)),
@@ -208,7 +206,7 @@ class Model(nn.Module):
 
         self.actor = nn.Sequential(
             layer_init(
-                nn.Linear(self.config.n_embed, self.config.n_embed)),
+                nn.Linear(self.config.n_embed * 3, self.config.n_embed)),
             nn.GELU(),
             nn.Dropout(p=self.config.dropout),
             layer_init(nn.Linear(self.config.n_embed, self.config.n_embed)),
@@ -217,73 +215,38 @@ class Model(nn.Module):
                 nn.Linear(self.config.n_embed, self.n_action), std=0.01),
         )
 
-        self.post_concat_mlp = MLP(config, inp_size=config.n_embed * 2)
+        self.agent_post_concat_mlp = MLP(config, inp_size=config.n_embed * 2)
+        self.object_post_concat_mlp = MLP(config, inp_size=config.n_embed * 2)
 
-        # Encodings for agents and objects to distinguish them in attention
-        self.agent_encoding = nn.Parameter(torch.randn(1, 1, config.n_embed))
-        self.object_encoding = nn.Parameter(torch.randn(1, 1, config.n_embed))
-        
         self.ape = nn.Embedding(100, config.n_embed)
         self.ope = nn.Embedding(100, config.n_embed)
-        
-        # self.agent_agg = nn.Sequential(
-        #     layer_init(nn.Linear(5 * config.n_embed, config.n_embed)),
-        #     nn.GELU(),
-        #     nn.Dropout(p=self.config.dropout),
-        #     nn.LayerNorm(config.n_embed),
-        #     layer_init(nn.Linear(config.n_embed, config.n_embed)),
-        #     nn.GELU(),
-        #     nn.Dropout(p=self.config.dropout),
-        #     nn.LayerNorm(config.n_embed),
-        # )
-        
-        # self.msg_up_func = nn.Sequential(
-        #     layer_init(nn.Linear(2 * config.n_embed, config.n_embed)),
-        #     nn.GELU(),
-        #     nn.Dropout(p=self.config.dropout),
-        #     nn.LayerNorm(config.n_embed),
-        #     layer_init(nn.Linear(config.n_embed, config.n_embed)),
-        #     nn.GELU(),
-        #     nn.Dropout(p=self.config.dropout),
-        #     nn.LayerNorm(config.n_embed),
-        # )
-        
-        # self.msg_down_func = nn.Sequential(
-        #     layer_init(nn.Linear(2 * config.n_embed, config.n_embed)),
-        #     nn.GELU(),
-        #     nn.Dropout(p=self.config.dropout),
-        #     nn.LayerNorm(config.n_embed),
-        #     layer_init(nn.Linear(config.n_embed, config.n_embed)),
-        #     nn.GELU(),
-        #     nn.Dropout(p=self.config.dropout),
-        #     nn.LayerNorm(config.n_embed),
-        # )
-        
-        # self.init_msg = nn.Parameter(torch.randn(1, config.n_embed))
 
-        # self.final_embedding_proj = nn.Sequential(
-        #     layer_init(nn.Linear(3 * config.n_embed, config.n_embed)),
-        #     nn.GELU(),
-        #     nn.Dropout(p=self.config.dropout),
-        #     nn.LayerNorm(config.n_embed),
-        #     layer_init(nn.Linear(config.n_embed, config.n_embed)),
-        #     nn.GELU(),
-        #     nn.Dropout(p=self.config.dropout),
-        #     nn.LayerNorm(config.n_embed),
-        # )
-            
+        self.msg_enc = MLP(config, inp_size=config.n_embed * 2, layer_norm=True)
+        self.msg_dec = MLP(config, inp_size=config.n_embed * 2, layer_norm=True)
+
+        
     def process_agents_and_objects(self, obs):
         
+        # ==========
         A = obs[:, :self.agents, :]
         O = obs[:, self.agents:, :]
-
         agent_x = self.agent_prep(A)
         object_x = self.object_prep(O)
-
+        # ==========
+        
+        
+        # ==========
+        # all_objects = object_x.reshape(object_x.shape[0], object_x.shape[-1]*object_x.shape[-2])
+        # agent_x = torch.cat([agent_x, all_objects.unsqueeze(1).repeat(1, self.agents, 1)], dim=-1)
+        # agent_x = self.tmp_nn(agent_x)
+        # ==========
+        
+        
+        # ==========
         # find objects each agent is holding
         idx = obs[:, :self.agents, 3].long().unsqueeze(-1)  # (bs, agents, 1)
         mask = (idx != -1).float()  # (bs, agents, 1)
-        idx[idx == -1] = 0
+        idx[idx < -0.5] = 0
 
         # pick out the object embeddings
         picked_objects = torch.gather(
@@ -295,20 +258,39 @@ class Model(nn.Module):
 
         # concat agent and object embeddings
         # (bs, agents, 2*embed)
-        x = torch.cat([agent_x, picked_objects], dim=-1)
-        x = self.post_concat_mlp(x)
-
-
-        # x = self.agent_encoding.repeat(x.shape[0], 1, 1) + x
-        # y = self.object_encoding.repeat(x.shape[0], 1, 1) + object_x
-
-        agent_pos = torch.arange(0, A.shape[1]).unsqueeze(0).repeat(x.shape[0], 1).long().to(x.device)
-        object_pos = torch.arange(0, O.shape[1]).unsqueeze(0).repeat(x.shape[0], 1).long().to(x.device)
+        a_x = torch.cat([agent_x, picked_objects], dim=-1)
+        a_x = self.agent_post_concat_mlp(a_x)
+        # ==========
         
-        x = x + self.ape(agent_pos)
-        y = object_x + self.ope(object_pos)
 
-        return x, y
+        # ==========
+        # find agents each object is held by
+        idx = O[:, :, 4].long().unsqueeze(-1) # (bs, objects, 1)
+        mask = (idx != -1).float()  # (bs, objects, 1)
+        idx[idx < -0.5] = 0
+        
+        # pick out the agent embeddings
+        picked_agents = torch.gather(
+            agent_x, 1, idx.repeat(1, 1, self.config.n_embed))
+        
+        # mask out the agents for empty objects
+        picked_agents = picked_agents * \
+            mask.repeat(1, 1, self.config.n_embed)
+            
+        # concat agent and object embeddings
+        o_x = torch.cat([object_x, picked_agents], dim=-1)
+        o_x = self.object_post_concat_mlp(o_x)
+        # ==========
+        
+        
+        # ==========
+        agent_pos = torch.arange(0, A.shape[1]).unsqueeze(0).repeat(agent_x.shape[0], 1).long().to(agent_x.device)
+        object_pos = torch.arange(0, O.shape[1]).unsqueeze(0).repeat(object_x.shape[0], 1).long().to(object_x.device)
+        a_x = a_x + self.ape(agent_pos)
+        o_x = o_x + self.ope(object_pos)
+        # ==========
+
+        return a_x, o_x
 
     def get_embedding(self, obs):
         agent_x, object_x = self.process_agents_and_objects(obs)        
@@ -319,54 +301,29 @@ class Model(nn.Module):
 
         return x
     
-    # def get_embedding(self, obs):
-    #     agent_x, object_x = self.process_agents_and_objects(obs)        
-    #     x = torch.cat([agent_x, object_x], dim=1)
-        
-    #     # obj_avg = object_x.mean(dim=1, keepdim=True)
-    #     # obj_mx = object_x.max(dim=1, keepdim=True)[0]
-    #     # obj_mn = object_x.min(dim=1, keepdim=True)[0]
-    #     # obj_sum = object_x.sum(dim=1, keepdim=True)
-        
-    #     # obj_agg = torch.cat([obj_avg, obj_mx, obj_mn, obj_sum], dim=-1)
-        
-    #     # # cat the agent_x with the object aggregation
-    #     # x = torch.cat([agent_x, torch.repeat_interleave(obj_agg, repeats=agent_x.shape[1], dim=1)], dim=-1)
-    #     # x = self.agent_agg(x)
-        
-    #     ''' Use Attenion '''
-    #     for att in self.atts:
-    #         x = att(x)
-    #     x = x[:, :self.agents, :]
-        
-        
-    #     current_msg = self.init_msg.repeat(x.shape[0], 1)
-        
-    #     all_down_msgs = []
-    #     all_up_msgs = []
-        
-    #     for id in range(self.agents):
-    #         new_msg = self.msg_down_func(torch.cat([x[:, id, :], current_msg], dim=-1))
-    #         all_down_msgs.append(new_msg)
-    #         current_msg = new_msg
-        
-    #     for id in range(self.agents - 1, -1, -1):
-    #         new_msg = self.msg_up_func(torch.cat([all_down_msgs[id], current_msg], dim=-1))
-    #         all_up_msgs.append(new_msg)
-    #         current_msg = new_msg
-            
-    #     all_down_msgs = torch.stack(all_down_msgs, dim=1)
-    #     all_up_msgs = torch.stack(all_up_msgs, dim=1)
-        
-    #     x = torch.cat([x, all_down_msgs, all_up_msgs], dim=-1)
-    #     x = self.final_embedding_proj(x)
-        
-    #     return x
-
     def get_action_and_value(self, obs, mask, action=None):
 
         x = self.get_embedding(obs)
         agent_x = x[:, :self.agents, :]
+        
+        current_msg = torch.zeros(agent_x.shape[0], self.config.n_embed).to(agent_x.device)
+        
+        enc_msgs = []
+        dec_msgs = []
+        for i in range(self.agents):
+            current_msg = self.msg_enc(torch.cat([agent_x[:, i, :], current_msg], dim=-1))
+            enc_msgs.append(current_msg)
+            
+        for i in range(self.agents-1, -1, -1):
+            current_msg = self.msg_dec(torch.cat([agent_x[:, i, :], current_msg], dim=-1))
+            dec_msgs.append(current_msg)
+            
+        enc_msgs = torch.stack(enc_msgs, dim=1)
+        dec_msgs = torch.stack(dec_msgs, dim=1)
+
+        
+        agent_x = torch.cat([agent_x, enc_msgs, dec_msgs], dim=-1)
+        
 
         logits = self.actor(agent_x)
 

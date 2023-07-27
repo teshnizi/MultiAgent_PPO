@@ -20,7 +20,7 @@ class PPO():
         self.args = args
 
         self.device = torch.device(
-            "cuda:1" if torch.cuda.is_available() and self.args.cuda else "cpu")
+            "cuda:0" if torch.cuda.is_available() and self.args.cuda else "cpu")
 
         print("running on device:", self.device)
         self.agent = agent.to(self.device)
