@@ -45,9 +45,9 @@ def parse_args():
     # Algorithm specific arguments
     parser.add_argument("--env-id", type=str, default="CartPole-v1",
         help="the id of the environment")
-    parser.add_argument("--total-timesteps", type=int, default=500000,
+    parser.add_argument("--total-timesteps", type=int, default=20000000,
         help="total timesteps of the experiments")
-    parser.add_argument("--learning-rate", type=float, default=3e-3,
+    parser.add_argument("--learning-rate", type=float, default=2e-3,
         help="the learning rate of the optimizer")
     parser.add_argument("--num-envs", type=int, default=4,
         help="the number of parallel game environments")

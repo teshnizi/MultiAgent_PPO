@@ -77,7 +77,7 @@ class AgentConfig:
     n_embed: int = 128
     dropout: float = 0.2
     n_head: int = 4
-    n_layer: int = 12
+    n_layer: int = 8
     bias: bool = True
 
 
