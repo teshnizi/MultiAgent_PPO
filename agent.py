@@ -111,7 +111,7 @@ class Attention(nn.Module):
 
         self.config = config
 
-        assert self.config.n_embed % self.config.n_head == 0, f"Hidden size {config.n_embed} must be divisible by number of attention heads {heads}"
+        assert self.config.n_embed % self.config.n_head == 0, f"Hidden size {config.n_embed} must be divisible by number of attention heads {config.n_head}"
 
         self.q = nn.Linear(self.config.n_embed, self.config.n_embed)
         self.k = nn.Linear(self.config.n_embed, self.config.n_embed)
