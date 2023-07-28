@@ -196,7 +196,7 @@ class Model(nn.Module):
 
         self.critic = nn.Sequential(
             layer_init(
-                nn.Linear(self.config.n_embed * 3, self.config.n_embed)),
+                nn.Linear(self.config.n_embed * 4, self.config.n_embed)),
             nn.GELU(),
             nn.Dropout(p=self.config.dropout),
             layer_init(nn.Linear(self.config.n_embed, self.config.n_embed)),
@@ -206,7 +206,7 @@ class Model(nn.Module):
 
         self.actor = nn.Sequential(
             layer_init(
-                nn.Linear(self.config.n_embed * 3, self.config.n_embed)),
+                nn.Linear(self.config.n_embed * 4, self.config.n_embed)),
             nn.GELU(),
             nn.Dropout(p=self.config.dropout),
             layer_init(nn.Linear(self.config.n_embed, self.config.n_embed)),
@@ -305,6 +305,7 @@ class Model(nn.Module):
 
         x = self.get_embedding(obs)
         agent_x = x[:, :self.agents, :]
+        object_x = x[:, self.agents:, :]
         
         current_msg = torch.zeros(agent_x.shape[0], self.config.n_embed).to(agent_x.device)
         
@@ -321,8 +322,8 @@ class Model(nn.Module):
         enc_msgs = torch.stack(enc_msgs, dim=1)
         dec_msgs = torch.stack(dec_msgs, dim=1)
 
-        
-        agent_x = torch.cat([agent_x, enc_msgs, dec_msgs], dim=-1)
+        object_max_pool = torch.max(object_x, dim=1)[0]
+        agent_x = torch.cat([agent_x, enc_msgs, dec_msgs, object_max_pool], dim=-1)
         
 
         logits = self.actor(agent_x)

@@ -176,9 +176,9 @@ class WarehouseEnv(gym.Env):
         done = (self.objects[:, 0] <= -
                 1).all() or self.current_step >= self.max_steps
         
-        if done:
-            if (self.objects[:, 0] <= -1).all():
-                reward += 50
+        # if done:
+        #     if (self.objects[:, 0] <= -1).all():
+        #         reward += 50
 
         obs = np.concatenate((self.agents, self.objects), axis=0)
 

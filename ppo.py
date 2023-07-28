@@ -20,7 +20,7 @@ class PPO():
         self.args = args
 
         self.device = torch.device(
-            "cuda:0" if torch.cuda.is_available() and self.args.cuda else "cpu")
+            "cuda:1" if torch.cuda.is_available() and self.args.cuda else "cpu")
 
         print("running on device:", self.device)
         self.agent = agent.to(self.device)
@@ -31,12 +31,13 @@ class PPO():
         self.optimizer = torch.optim.Adam(
             self.agent.parameters(), lr=self.args.learning_rate, eps=1e-5)
 
-        self.writer = SummaryWriter(f"runs/{run_name}")
-        self.writer.add_text(
-            "hyperparameters",
-            "|param|value|\n|-|-|\n%s" % (
-                "\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
-        )
+        if self.args.tensorboard:
+            self.writer = SummaryWriter(f"runs/{run_name}")
+            self.writer.add_text(
+                "hyperparameters",
+                "|param|value|\n|-|-|\n%s" % (
+                    "\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
+            )
 
         self.args.num_updates = self.args.total_timesteps // self.args.batch_size
 
@@ -103,11 +104,11 @@ class PPO():
                     if item != None and "episode" in item.keys():
                         print(
                             f"global_step={self.global_step}, episodic_return={item['episode']['r']}")
-                        self.writer.add_scalar("charts/episodic_return",
-                                               item["episode"]["r"], self.global_step)
-                        self.writer.add_scalar("charts/episodic_length",
-                                               item["episode"]["l"], self.global_step)
-                        break
+                        if self.args.tensorboard:
+                            self.writer.add_scalar("charts/episodic_return",
+                                                item["episode"]["r"], self.global_step)
+                            self.writer.add_scalar("charts/episodic_length",
+                                                item["episode"]["l"], self.global_step)
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -183,12 +184,20 @@ class PPO():
         # Optimizing the policy and value network
         b_inds = np.arange(self.args.batch_size)
 
+        # p = 0.1 + (b_returns - b_returns.min()) / \
+        #     (b_returns.max() - b_returns.min()) * 0.8
+        # p = p / p.sum()
+        # p = p.squeeze().cpu().numpy()
+        
         clipfracs = []
         for epoch in range(self.args.update_epochs):
             # np.random.shuffle(b_inds)
             for start in range(0, self.args.batch_size, self.args.minibatch_size):
                 end = start + self.args.minibatch_size
                 mb_inds = b_inds[start:end]
+                
+                # mb_inds = np.random.choice(
+                #     b_inds, size=self.args.minibatch_size, replace=True, p=p)
 
                 _, newlogprob, entropy, newvalue = self.agent.get_action_and_value(
                     b_obs[mb_inds], b_masks[mb_inds], b_actions.long()[mb_inds])
@@ -236,26 +245,27 @@ class PPO():
         explained_var = np.nan if var_y == 0 else 1 - \
             np.var(y_true - y_pred) / var_y
 
-        # TRY NOT TO MODIFY: record rewards for plotting purposes
-        self.writer.add_scalar("charts/learning_rate",
-                               self.optimizer.param_groups[0]["lr"], self.global_step)
-        self.writer.add_scalar("losses/value_loss",
-                               v_loss.item(), self.global_step)
-        self.writer.add_scalar("losses/policy_loss",
-                               pg_loss.item(), self.global_step)
-        self.writer.add_scalar("losses/entropy",
-                               entropy_loss.item(), self.global_step)
-        self.writer.add_scalar("losses/old_approx_kl",
-                               old_approx_kl.item(), self.global_step)
-        self.writer.add_scalar("losses/approx_kl",
-                               approx_kl.item(), self.global_step)
-        self.writer.add_scalar("losses/clipfrac",
-                               np.mean(clipfracs), self.global_step)
-        self.writer.add_scalar("losses/explained_variance",
-                               explained_var, self.global_step)
-        print("SPS:", int(self.global_step / (time.time() - self.start_time)))
-        self.writer.add_scalar("charts/SPS", int(self.global_step /
-                                                 (time.time() - self.start_time)), self.global_step)
+        if self.args.tensorboard:
+            # TRY NOT TO MODIFY: record rewards for plotting purposes
+            self.writer.add_scalar("charts/learning_rate",
+                                self.optimizer.param_groups[0]["lr"], self.global_step)
+            self.writer.add_scalar("losses/value_loss",
+                                v_loss.item(), self.global_step)
+            self.writer.add_scalar("losses/policy_loss",
+                                pg_loss.item(), self.global_step)
+            self.writer.add_scalar("losses/entropy",
+                                entropy_loss.item(), self.global_step)
+            self.writer.add_scalar("losses/old_approx_kl",
+                                old_approx_kl.item(), self.global_step)
+            self.writer.add_scalar("losses/approx_kl",
+                                approx_kl.item(), self.global_step)
+            self.writer.add_scalar("losses/clipfrac",
+                                np.mean(clipfracs), self.global_step)
+            self.writer.add_scalar("losses/explained_variance",
+                                explained_var, self.global_step)
+            print("SPS:", int(self.global_step / (time.time() - self.start_time)))
+            self.writer.add_scalar("charts/SPS", int(self.global_step /
+                                                    (time.time() - self.start_time)), self.global_step)
 
     def train(self):
 

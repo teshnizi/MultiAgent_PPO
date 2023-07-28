@@ -85,6 +85,8 @@ def parse_args():
         help="if toggled, evaluation runs will be deterministic and performed on the CPU")
     parser.add_argument("--show", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="if toggled, the environment will be rendered")
+    parser.add_argument("--tensorboard", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+        help="if toggled, tensorboard logs will be created")
 
     # ===============================
     # Custom arguments
