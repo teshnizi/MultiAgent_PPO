@@ -23,7 +23,7 @@ class Agent(nn.Module):
         self.agents = agents
         self.critic = nn.Sequential(
             layer_init(
-                nn.Linear(np.array(envs.single_observation_space.shape[-1] * 3), 64)),
+                nn.Linear(np.array(envs.single_observation_space.shape[-1] * 2), 64)),
             nn.GELU(),
             layer_init(nn.Linear(64, 64)),
             nn.GELU(),
@@ -32,7 +32,7 @@ class Agent(nn.Module):
 
         self.actor = nn.Sequential(
             layer_init(
-                nn.Linear(np.array(envs.single_observation_space.shape[-1] * 3), 64)),
+                nn.Linear(np.array(envs.single_observation_space.shape[-1] * 2), 64)),
             nn.GELU(),
             layer_init(nn.Linear(64, 64)),
             nn.GELU(),
@@ -40,7 +40,7 @@ class Agent(nn.Module):
                 nn.Linear(64, 7 * self.agents), std=0.01),
         )
 
-    def get_action_and_value(self, x, mask, action=None):
+    def forward(self, x, mask, action=None):
         """
         Returns:
             action: (batch_size, xxx, agents)
@@ -51,7 +51,9 @@ class Agent(nn.Module):
 
         agents_x = x[:, :self.agents, :]
         object_x = x[:, self.agents:, :]
-
+        
+        # concat object and agent
+        agents_x = torch.cat([agents_x, object_x], dim=-1)
         agents_x = x.reshape(x.shape[0], -1)
 
         logits = self.actor(agents_x)
@@ -69,7 +71,7 @@ class Agent(nn.Module):
 
         value = self.critic(agents_x)
 
-        return action, probs.log_prob(action), probs.entropy(), value
+        return action, probs.log_prob(action), probs.entropy(), value, probs.probs
 
 
 @dataclass
@@ -181,7 +183,7 @@ class Block(nn.Module):
 
 
 class Model(nn.Module):
-    def __init__(self, envs, config, agents=1, n_action=7, n_features=5):
+    def __init__(self, envs, config, agents=1, n_action=7, n_features=6):
         super().__init__()
 
         self.agents = agents
@@ -196,7 +198,7 @@ class Model(nn.Module):
 
         self.critic = nn.Sequential(
             layer_init(
-                nn.Linear(self.config.n_embed * 4, self.config.n_embed)),
+                nn.Linear(self.config.n_embed * 2, self.config.n_embed)),
             nn.GELU(),
             nn.Dropout(p=self.config.dropout),
             layer_init(nn.Linear(self.config.n_embed, self.config.n_embed)),
@@ -206,7 +208,7 @@ class Model(nn.Module):
 
         self.actor = nn.Sequential(
             layer_init(
-                nn.Linear(self.config.n_embed * 4, self.config.n_embed)),
+                nn.Linear(self.config.n_embed * 2, self.config.n_embed)),
             nn.GELU(),
             nn.Dropout(p=self.config.dropout),
             layer_init(nn.Linear(self.config.n_embed, self.config.n_embed)),
@@ -294,14 +296,15 @@ class Model(nn.Module):
 
     def get_embedding(self, obs):
         agent_x, object_x = self.process_agents_and_objects(obs)        
+        
         x = torch.cat([agent_x, object_x], dim=1)
-
+        
         for att in self.atts:
             x = att(x)
 
         return x
     
-    def get_action_and_value(self, obs, mask, action=None):
+    def forward(self, obs, mask, action=None):
 
         x = self.get_embedding(obs)
         agent_x = x[:, :self.agents, :]
@@ -309,23 +312,22 @@ class Model(nn.Module):
         
         current_msg = torch.zeros(agent_x.shape[0], self.config.n_embed).to(agent_x.device)
         
-        enc_msgs = []
-        dec_msgs = []
-        for i in range(self.agents):
-            current_msg = self.msg_enc(torch.cat([agent_x[:, i, :], current_msg], dim=-1))
-            enc_msgs.append(current_msg)
+        # enc_msgs = []
+        # dec_msgs = []
+        # for i in range(self.agents):
+        #     current_msg = self.msg_enc(torch.cat([agent_x[:, i, :], current_msg], dim=-1))
+        #     enc_msgs.append(current_msg)
             
-        for i in range(self.agents-1, -1, -1):
-            current_msg = self.msg_dec(torch.cat([agent_x[:, i, :], current_msg], dim=-1))
-            dec_msgs.append(current_msg)
+        # for i in range(self.agents-1, -1, -1):
+        #     current_msg = self.msg_dec(torch.cat([agent_x[:, i, :], current_msg], dim=-1))
+        #     dec_msgs.append(current_msg)
             
-        enc_msgs = torch.stack(enc_msgs, dim=1)
-        dec_msgs = torch.stack(dec_msgs, dim=1)
+        # enc_msgs = torch.stack(enc_msgs, dim=1)
+        # dec_msgs = torch.stack(dec_msgs, dim=1)
 
-        object_max_pool = torch.max(object_x, dim=1)[0]
-        agent_x = torch.cat([agent_x, enc_msgs, dec_msgs, object_max_pool], dim=-1)
+        object_max_pool = torch.max(object_x, dim=1)[0].unsqueeze(1).repeat(1, self.agents, 1)
+        agent_x = torch.cat([agent_x, object_max_pool], dim=-1)
         
-
         logits = self.actor(agent_x)
 
         logits = logits.reshape(x.shape[0], self.agents, -1)
@@ -339,4 +341,7 @@ class Model(nn.Module):
 
         value = self.critic(agent_x).squeeze(-1)
 
-        return action, probs.log_prob(action), probs.entropy(), value
+        return action, probs.log_prob(action), probs.entropy(), value, probs.probs
+    
+    
+    

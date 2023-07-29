@@ -80,7 +80,7 @@ class PPO():
 
             # ALGO LOGIC: action logic
             with torch.no_grad():
-                action, logprob, _, value = self.agent.get_action_and_value(
+                action, logprob, _, value, _ = self.agent(
                     next_obs, next_mask, action=None)
 
                 self.values[step] = value
@@ -112,7 +112,7 @@ class PPO():
 
         # bootstrap value if not done
         with torch.no_grad():
-            _, _, _, next_value = self.agent.get_action_and_value(
+            _, _, _, next_value, _ = self.agent(
                 next_obs, next_mask, action=None)
 
             lastgaelam = 0
@@ -199,7 +199,7 @@ class PPO():
                 # mb_inds = np.random.choice(
                 #     b_inds, size=self.args.minibatch_size, replace=True, p=p)
 
-                _, newlogprob, entropy, newvalue = self.agent.get_action_and_value(
+                _, newlogprob, entropy, newvalue, _ = self.agent(
                     b_obs[mb_inds], b_masks[mb_inds], b_actions.long()[mb_inds])
 
                 logratio = newlogprob - b_logprobs[mb_inds]
@@ -326,10 +326,10 @@ class PPO():
                     action = int(input('Action: '))
                     action = torch.tensor(action).to(
                         self.device).reshape(1, -1)
-                    _, log_prob, entropy, value = self.agent.get_action_and_value(
+                    _, log_prob, entropy, value, _ = self.agent(
                         obs, mask, action=action)
                 else:
-                    action, log_prob, entropy, value = self.agent.get_action_and_value(
+                    action, log_prob, entropy, value, _ = self.agent(
                         obs, mask)
 
                 action, log_prob, entropy, value = action.squeeze(
