@@ -16,6 +16,8 @@ from datetime import datetime
 import warehouse_env
 from agent import Agent, Model, AgentConfig
 from ppo import PPO
+from mcts import MCTS
+
 from utils import make_env, strtobool
 
 # set torch to print all tensor
@@ -135,6 +137,9 @@ if __name__ == "__main__":
         [make_env(args.env_id, args.seed + i, i, args.capture_video, run_name, **kwargs)
          for i in range(args.num_envs)]
     )
+    
+    sim_env = make_env(args.env_id, args.seed + args.num_envs + 1,
+                       args.num_envs + 1, args.capture_video, run_name, **kwargs)()
 
     test_envs = make_env(args.env_id, args.seed + args.num_envs + 1,
                          args.num_envs + 1, args.capture_video, run_name, **kwargs)()
@@ -142,10 +147,12 @@ if __name__ == "__main__":
     assert isinstance(envs.single_action_space,
                       gym.spaces.MultiDiscrete), "only multi discrete action space is supported (one discrete action per agent)"
 
-    # agent = Agent(envs, agents=args.agents)
-    agent = Model(envs, config=AgentConfig, agents=args.agents, n_action=7)
-
-    ppo = PPO(agent, envs, test_envs, args, run_name)
+    model = Agent(envs, agents=args.agents)
+    # model = Model(envs, config=AgentConfig, agents=args.agents, n_action=7)
+    
+    mcts = MCTS(model, sim_env, num_simulations=1, exploration_constant=1)
+    
+    ppo = PPO(mcts, envs, test_envs, args, run_name)
 
     if args.load is not None:
         ppo.load(args.load)

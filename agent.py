@@ -310,7 +310,7 @@ class Model(nn.Module):
         agent_x = x[:, :self.agents, :]
         object_x = x[:, self.agents:, :]
         
-        current_msg = torch.zeros(agent_x.shape[0], self.config.n_embed).to(agent_x.device)
+        # current_msg = torch.zeros(agent_x.shape[0], self.config.n_embed).to(agent_x.device)
         
         # enc_msgs = []
         # dec_msgs = []
