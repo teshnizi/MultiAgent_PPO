@@ -72,7 +72,8 @@ class PPO():
         next_mask = self.next_mask
 
         for step in range(0, steps):
-
+            
+            # print('Step: ', step)
             self.global_step += 1 * self.args.num_envs
             self.obs[step] = next_obs
             self.masks[step] = next_mask
@@ -203,10 +204,16 @@ class PPO():
                     b_obs[mb_inds], b_masks[mb_inds], b_actions.long()[mb_inds])
 
                 logratio = newlogprob - b_logprobs[mb_inds]
+
+                # change print format to non-scientific
+                torch.set_printoptions(sci_mode=False)
+    
                 logratio = logratio.sum(-1, keepdim=True)
 
+                
                 ratio = logratio.exp()
-
+                
+                
                 with torch.no_grad():
                     # calculate approx_kl http://joschu.net/blog/kl-approx.html
                     old_approx_kl = (-logratio).mean()
@@ -263,10 +270,12 @@ class PPO():
                                 np.mean(clipfracs), self.global_step)
             self.writer.add_scalar("losses/explained_variance",
                                 explained_var, self.global_step)
-            print("SPS:", int(self.global_step / (time.time() - self.start_time)))
+            
             self.writer.add_scalar("charts/SPS", int(self.global_step /
                                                     (time.time() - self.start_time)), self.global_step)
-
+            
+        print("SPS:", int(self.global_step / (time.time() - self.start_time)))
+        
     def train(self):
 
         # TRY NOT TO MODIFY: start the game

@@ -71,7 +71,7 @@ class WarehouseEnv(gym.Env):
 
 
     def step_logic(self, state, action):
-        
+
         if isinstance(action, np.int64):
             action = np.array([action])
          
@@ -92,7 +92,6 @@ class WarehouseEnv(gym.Env):
 
         assert np.unique(agents[:, 3][agents[:, 3] >= 0]).shape[0] == agents[:,
                                                                                             3][agents[:, 3] >= 0].shape[0], "Two objects are taken to the same destination!"
-
         rewards = np.zeros(self.agent_num)
         
         for a in range(self.agent_num):
@@ -148,6 +147,14 @@ class WarehouseEnv(gym.Env):
                 if objects[valid_object, 5] == 1:
                     rewards[a] += 10 / self.object_num
                     objects[valid_object, 5] = 0
+                    
+                # rewards[a] += 40 / self.object_num
+
+                # objects[int(agents[a, 3]), 4] = -1
+                # objects[int(agents[a, 3]), :] = -4
+
+                # agents[a, 3] = -1
+                
 
             elif action[a] == 6:  # Drop Off
                 assert agents[a, 3] != -1, "Agent not carrying an object!"
@@ -155,8 +162,6 @@ class WarehouseEnv(gym.Env):
                 objects[int(agents[a, 3]), 4] = -1
                 agents[a, 3] = -1
                 
-
-
             if agents[a, 3] != -1:
                 if (objects[int(agents[a, 3]), 0:2] == objects[int(agents[a, 3]), 2:4]).all():
                     rewards[a] += 40 / self.object_num
@@ -173,8 +178,7 @@ class WarehouseEnv(gym.Env):
         #                  0:2] - objects[:, 2:4]))/(self.N * self.object_num)
         
         # environment terminates when all objects are at their destinations or when max_steps is reached
-        done = (objects[:, 0] <= -
-                1).all() or self.current_step >= self.max_steps
+        done = (objects[:, 0] <= -1).all()
         
         if done:
             if (objects[:, 0] <= -1).all():
@@ -189,10 +193,13 @@ class WarehouseEnv(gym.Env):
         
     def step(self, action):
         
-        self.current_step += 1
-        
         current_obs = np.concatenate((self.agents, self.objects), axis=0)
         new_obs, reward, done, new_mask = self.step_logic(current_obs, action)
+        
+        self.current_step += 1
+        if self.current_step >= self.max_steps:
+            done = True
+        
         self.agents = new_obs[:self.agent_num]
         self.objects = new_obs[self.agent_num:]
         
@@ -224,7 +231,7 @@ class WarehouseEnv(gym.Env):
         for i in range(self.agent_num):
 
             # Do Nothing
-            mask[i, 0] = 1
+            mask[i, 0] = 0
 
             # Move Right if not at edge and not blocked by another agent
             if agent_data[i, 0] < self.N - 1 and not np.any(np.all(agent_data[:, 0:2] == agent_data[i, 0:2] + np.array([1, 0]), axis=1)):
@@ -246,7 +253,7 @@ class WarehouseEnv(gym.Env):
             if agent_data[i, 3] == -1 and np.any(np.all(object_data[:, 0:2] == agent_data[i, 0:2], axis=1)):
                 obj = np.where(
                     np.all(object_data[:, 0:2] == agent_data[i, 0:2], axis=1))[0][0]
-                if self.objects[obj, 4] == -1:
+                if object_data[obj, 4] == -1:
                     mask[i, 5] = 1
 
             # Drop Off if there's no other object at agent location and agent is carrying an object
@@ -257,6 +264,7 @@ class WarehouseEnv(gym.Env):
         mask = mask.astype(bool)
 
         return mask
+
 
     def reset(self, seed=None, options=None):
 
@@ -293,6 +301,10 @@ class WarehouseEnv(gym.Env):
         self.current_step = 0
 
         self.objects[:, 5] = 1
+        
+        # self.agents[0, 0:2] = np.array([1, 2])
+        # self.objects[0, 0:2] = np.array([3, 2])
+        # self.objects[1, 0:2] = np.array([3, 1])
         
         obs = np.concatenate((self.agents, self.objects), axis=0)
         info = {'mask': self.calculate_mask(obs)}
@@ -343,7 +355,6 @@ class WarehouseEnv(gym.Env):
     # a function that takes in a state and an action and returns the next state, reward, and done
     def simulate(state, action):
         pass
-        
         
         
 # register the env

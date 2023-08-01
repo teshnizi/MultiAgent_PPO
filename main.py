@@ -69,7 +69,7 @@ def parse_args():
         help="Toggles advantages normalization")
     parser.add_argument("--clip-coef", type=float, default=0.2,
         help="the surrogate clipping coefficient")
-    parser.add_argument("--clip-vloss", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--clip-vloss", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Toggles whether or not to use a clipped loss for the value function, as per the paper.")
     parser.add_argument("--ent-coef", type=float, default=0.01,
         help="coefficient of the entropy")
@@ -89,7 +89,7 @@ def parse_args():
         help="if toggled, the environment will be rendered")
     parser.add_argument("--tensorboard", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, tensorboard logs will be created")
-
+    
     # ===============================
     # Custom arguments
     # ===============================
@@ -101,6 +101,15 @@ def parse_args():
 
     parser.add_argument("--grid-size", type=int, default=10,
         help="the size of the grid in the environment")
+    
+    parser.add_argument("--num-simulations", type=int, default=20,
+        help="the number of MCTS simulations to run for each action")
+
+    parser.add_argument("--exploration-constant", type=float, default=1.0,
+        help="the exploration constant for MCTS")
+    
+    # parser.add_argument("--simulation-depth", type=int, default=10,
+    #     help="the depth of the MCTS simulation")
 
     # ===============================
     # ===============================
@@ -117,7 +126,7 @@ if __name__ == "__main__":
 
     args = parse_args()
     readable_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    run_name = f"{args.env_id}__N:{args.grid_size}__agents:{args.agents}__objects:{args.objects}__{args.seed}__{readable_time}"
+    run_name = f"{args.env_id}__N:{args.grid_size}__agents:{args.agents}__objects:{args.objects}__sims:{args.num_simulations}__{args.seed}__{readable_time}"
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
@@ -150,7 +159,7 @@ if __name__ == "__main__":
     model = Agent(envs, agents=args.agents)
     # model = Model(envs, config=AgentConfig, agents=args.agents, n_action=7)
     
-    mcts = MCTS(model, sim_env, num_simulations=1, exploration_constant=1)
+    mcts = MCTS(model, sim_env, args)
     
     ppo = PPO(mcts, envs, test_envs, args, run_name)
 

@@ -76,10 +76,10 @@ class Agent(nn.Module):
 
 @dataclass
 class AgentConfig:
-    n_embed: int = 128
+    n_embed: int = 32
     dropout: float = 0.2
     n_head: int = 4
-    n_layer: int = 8
+    n_layer: int = 2
     bias: bool = True
 
 
@@ -98,10 +98,12 @@ class MLP(nn.Module):
         self.layer_norm = nn.LayerNorm([config.n_embed]) if layer_norm else None
 
     def forward(self, x):
+        
         x = self.c_fc(x)
         x = self.gelu(x)
         x = self.c_proj(x)
         x = self.dropout(x)
+        
         if self.layer_norm is not None:
             x = self.layer_norm(x)
         return x
@@ -145,9 +147,11 @@ class Attention(nn.Module):
         k_vals = shape(self.k(x))
         v_vals = shape(self.v(x))
 
+        
+        
         tmp = self.q(x)
         tmp2 = unshape(shape(tmp))
-        assert (tmp-tmp2).abs().max() < 1e-5
+        assert (tmp-tmp2).abs().max() < 1e-5, f"{x}"
 
         # (bs, n_heads, seq_len, dim_per_head)
         q_vals = q_vals / math.sqrt(self.dim_per_head)
@@ -236,7 +240,6 @@ class Model(nn.Module):
         object_x = self.object_prep(O)
         # ==========
         
-        
         # ==========
         # all_objects = object_x.reshape(object_x.shape[0], object_x.shape[-1]*object_x.shape[-2])
         # agent_x = torch.cat([agent_x, all_objects.unsqueeze(1).repeat(1, self.agents, 1)], dim=-1)
@@ -305,7 +308,8 @@ class Model(nn.Module):
         return x
     
     def forward(self, obs, mask, action=None):
-
+        
+        # print('OBS: ', obs)
         x = self.get_embedding(obs)
         agent_x = x[:, :self.agents, :]
         object_x = x[:, self.agents:, :]
@@ -329,15 +333,22 @@ class Model(nn.Module):
         agent_x = torch.cat([agent_x, object_max_pool], dim=-1)
         
         logits = self.actor(agent_x)
-
+        # print('logits! ', logits)
+        # clip logits
+        # logits = torch.clamp(logits, -10, 10)
+        
         logits = logits.reshape(x.shape[0], self.agents, -1)
-
         logits[~mask] = -float('inf')
+        
+        
 
         probs = Categorical(logits=logits)
 
+        # print('probs: ', probs.probs)
+        # print('Action: ', action)
         if action is None:
             action = probs.sample()
+            # action = probs.probs.argmax(dim=-1)
 
         value = self.critic(agent_x).squeeze(-1)
 
