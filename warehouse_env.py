@@ -142,11 +142,13 @@ class WarehouseEnv(gym.Env):
                 agents[a, 3] = valid_object
 
                 objects[valid_object, 4] = a
-
-                # # add a reward if the object is never picked up before
+                
                 if objects[valid_object, 5] == 1:
                     rewards[a] += 10 / self.object_num
                     objects[valid_object, 5] = 0
+                
+                ### !!! WARNING !!! ###
+                # # add a reward if the object is never picked up before
                     
                 # rewards[a] += 40 / self.object_num
 
@@ -154,6 +156,7 @@ class WarehouseEnv(gym.Env):
                 # objects[int(agents[a, 3]), :] = -4
 
                 # agents[a, 3] = -1
+                ########################
                 
 
             elif action[a] == 6:  # Drop Off
@@ -197,8 +200,8 @@ class WarehouseEnv(gym.Env):
         new_obs, reward, done, new_mask = self.step_logic(current_obs, action)
         
         self.current_step += 1
-        if self.current_step >= self.max_steps:
-            done = True
+        # if self.current_step >= self.max_steps:
+        #     done = True
         
         self.agents = new_obs[:self.agent_num]
         self.objects = new_obs[self.agent_num:]
@@ -352,11 +355,6 @@ class WarehouseEnv(gym.Env):
         pygame.time.delay(150)
 
 
-    # a function that takes in a state and an action and returns the next state, reward, and done
-    def simulate(state, action):
-        pass
-        
-        
 # register the env
 gym.register(id='Warehouse-v0',
              entry_point='warehouse_env:WarehouseEnv')

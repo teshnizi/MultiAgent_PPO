@@ -23,7 +23,7 @@ class Agent(nn.Module):
         self.agents = agents
         self.critic = nn.Sequential(
             layer_init(
-                nn.Linear(np.array(envs.single_observation_space.shape[-1] * 2), 64)),
+                nn.Linear(np.array(envs.single_observation_space.shape[-1] * 4), 64)),
             nn.GELU(),
             layer_init(nn.Linear(64, 64)),
             nn.GELU(),
@@ -32,7 +32,7 @@ class Agent(nn.Module):
 
         self.actor = nn.Sequential(
             layer_init(
-                nn.Linear(np.array(envs.single_observation_space.shape[-1] * 2), 64)),
+                nn.Linear(np.array(envs.single_observation_space.shape[-1] * 4), 64)),
             nn.GELU(),
             layer_init(nn.Linear(64, 64)),
             nn.GELU(),
@@ -51,6 +51,7 @@ class Agent(nn.Module):
 
         agents_x = x[:, :self.agents, :]
         object_x = x[:, self.agents:, :]
+        object_x = object_x.reshape(object_x.shape[0], -1).unsqueeze(1).expand(-1, self.agents, -1)
         
         # concat object and agent
         agents_x = torch.cat([agents_x, object_x], dim=-1)
@@ -76,10 +77,10 @@ class Agent(nn.Module):
 
 @dataclass
 class AgentConfig:
-    n_embed: int = 32
+    n_embed: int = 64
     dropout: float = 0.2
     n_head: int = 4
-    n_layer: int = 2
+    n_layer: int = 4
     bias: bool = True
 
 
@@ -132,7 +133,6 @@ class Attention(nn.Module):
 
     def forward(self, x: torch.Tensor):
 
-        # print(x.shape)
         bs, seq_len, _ = x.shape
 
         def shape(x: torch.Tensor) -> torch.Tensor:
@@ -309,7 +309,6 @@ class Model(nn.Module):
     
     def forward(self, obs, mask, action=None):
         
-        # print('OBS: ', obs)
         x = self.get_embedding(obs)
         agent_x = x[:, :self.agents, :]
         object_x = x[:, self.agents:, :]
@@ -333,7 +332,6 @@ class Model(nn.Module):
         agent_x = torch.cat([agent_x, object_max_pool], dim=-1)
         
         logits = self.actor(agent_x)
-        # print('logits! ', logits)
         # clip logits
         # logits = torch.clamp(logits, -10, 10)
         
@@ -344,8 +342,6 @@ class Model(nn.Module):
 
         probs = Categorical(logits=logits)
 
-        # print('probs: ', probs.probs)
-        # print('Action: ', action)
         if action is None:
             action = probs.sample()
             # action = probs.probs.argmax(dim=-1)

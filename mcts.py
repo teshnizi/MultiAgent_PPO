@@ -28,7 +28,8 @@ class MCTSNode:
         
     # define what happens when you print the node
     def __repr__(self):
-        return f"MCTSNode(state={self.state}, mask={self.mask}, reward={self.reward}, done={self.done}, parent={self.parent.state if self.parent != None else None},\n visits={self.visits}"
+        # return f"MCTSNode(state={self.state}, mask={self.mask}, reward={self.reward}, done={self.done}, parent={self.parent.state if self.parent != None else None},\n visits={self.visits}"
+        return f"MCTSNode (state={self.state.shape})"
 
 
 class MCTS(nn.Module):
@@ -41,42 +42,38 @@ class MCTS(nn.Module):
         self.args = args
 
     def search(self, root_state, root_mask):
-
         
         roots = []
         root_state = root_state.cpu().numpy()
         root_mask = root_mask.cpu().numpy()
         
         for env_id in range(root_state.shape[0]):
-            state = root_state[env_id]
-            mask = root_mask[env_id]
-            roots.append([])
             for agent in range(self.args.agents):
-                root = MCTSNode(state, mask, agent, reward=0, value=0, done=False, prob=1, parent=None)
-                roots[env_id].append(root)
-                
-                for _ in range(self.num_simulations):
-                    node = self.select(root)
-                    
-                    with torch.no_grad():
-                        state_inp = torch.from_numpy(node.state).unsqueeze(0).to(self.model_device)
-                        mask_inp = torch.from_numpy(node.mask).unsqueeze(0).to(self.model_device)
-                        # print('MCTS inp ', state_inp, mask_inp)
-                        _, _, _, value, action_probs = self.model(state_inp, mask_inp)
-                        node.action_probs = action_probs.squeeze(0).cpu().numpy()
-                        node.value = value.squeeze(0).cpu().numpy()
-                    
-                    node = self.expand(node)
-                    
-                    self.backpropagate(node)
-                 
-                root.best_action = self.best_child(root)
+                root = MCTSNode(root_state[env_id], root_mask[env_id], agent, reward=0, value=0, done=False, prob=1, parent=None)
+                roots.append(root)
+        
+        for _ in range(self.num_simulations):
             
+            nodes = [self.select(root) for root in roots]
+            
+            masks = torch.Tensor([node.mask for node in nodes]).to(self.model_device).bool()            
+            states = torch.Tensor([node.state for node in roots]).to(self.model_device)
+            
+            with torch.no_grad():
+                _, _, _, value, action_probs = self.model(states, masks)
+            
+            for i, node in enumerate(nodes):
+                node.action_probs = action_probs[i].cpu().numpy()
+                node.value = value[i].cpu().numpy()
+                
+                node = self.expand(node)
+                self.backpropagate(node)
+        
         best_action = np.zeros((root_state.shape[0], self.args.agents))
         
         for env_id in range(root_state.shape[0]):
             for agent in range(self.args.agents):
-                best_action[env_id, agent] = roots[env_id][agent].best_action
+                best_action[env_id, agent] = self.best_child(roots[env_id * self.args.agents + agent])
         
         return best_action  # Return the action leading to the best child
 
@@ -104,7 +101,7 @@ class MCTS(nn.Module):
 
 
     def backpropagate(self, node):
-        current_value = node.value
+        current_value = node.value.sum()
         while node:
             node.Q = (node.Q * node.visits + current_value) / (node.visits + 1)
             current_value = current_value * self.args.gamma + node.reward
@@ -115,7 +112,7 @@ class MCTS(nn.Module):
         # best_action, best_child = max(node.children.items(), key=lambda item: item[1].N)
         prob_dist = np.array([child.visits for child in node.children.values()])
         
-        # print('PD: ', prob_dist)
+       
         # use softmax to get the probability distribution
         prob_dist = np.exp(prob_dist) / np.sum(np.exp(prob_dist))
     
@@ -131,24 +128,24 @@ class MCTS(nn.Module):
 
 
     def best_uct(self, node):
-        uct_values = [(action, child) for action, child in node.children.items()]
-        action, child = max(uct_values, key=lambda item: self.uct_value(item[1]))
+        children = [(action, child) for action, child in node.children.items()]
+        uct_values = [(action, self.uct_value(child)) for action, child in children]
+        
+        action, uct_value = max(uct_values, key=lambda item: item[1])
+        child = node.children[action]
         return action, child
 
     def uct_value(self, node):
         exploit = node.Q/100.0
         explore = node.prob * np.sqrt(node.parent.visits) / (1 + node.visits) * np.sqrt(2)
-        # print(node.prob, np.sqrt(node.parent.visits), node.visits, np.sqrt(2))
+        
         return exploit + self.exploration_constant * explore
 
     def forward(self, state, mask, action):
-        # print('------ MCTS ------')
         self.model_device = self.model.parameters().__next__().device
         
-        
-        
         if self.args.num_simulations > 0: # Use MCTS if num_simulations > 0
-            
+        
             if action is None:
                 action = self.search(state.clone(), mask.clone())
                 action = torch.from_numpy(action).to(self.model_device).long()
@@ -160,7 +157,7 @@ class MCTS(nn.Module):
             
         return action, log_prob, entropy, value, probs
         
-
+        
 class DummyAgent:
     def __init__(self, num_actions):
         self.num_actions = num_actions

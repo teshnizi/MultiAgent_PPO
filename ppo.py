@@ -209,8 +209,6 @@ class PPO():
                 torch.set_printoptions(sci_mode=False)
     
                 logratio = logratio.sum(-1, keepdim=True)
-
-                
                 ratio = logratio.exp()
                 
                 

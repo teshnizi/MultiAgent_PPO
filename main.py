@@ -102,7 +102,7 @@ def parse_args():
     parser.add_argument("--grid-size", type=int, default=10,
         help="the size of the grid in the environment")
     
-    parser.add_argument("--num-simulations", type=int, default=20,
+    parser.add_argument("--num-simulations", type=int, default=0,
         help="the number of MCTS simulations to run for each action")
 
     parser.add_argument("--exploration-constant", type=float, default=1.0,
@@ -156,8 +156,8 @@ if __name__ == "__main__":
     assert isinstance(envs.single_action_space,
                       gym.spaces.MultiDiscrete), "only multi discrete action space is supported (one discrete action per agent)"
 
-    model = Agent(envs, agents=args.agents)
-    # model = Model(envs, config=AgentConfig, agents=args.agents, n_action=7)
+    # model = Agent(envs, agents=args.agents)
+    model = Model(envs, config=AgentConfig, agents=args.agents, n_action=7)
     
     mcts = MCTS(model, sim_env, args)
     
